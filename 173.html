@@ -5,51 +5,30 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>3D Model Viewer</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128/examples/js/loaders/OBJLoader.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128/examples/js/loaders/MTLLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three/examples/js/loaders/MTLLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three/examples/js/loaders/OBJLoader.js"></script>
     <style>
         body { margin: 0; overflow: hidden; }
         canvas { display: block; }
-
-        /* Loading progress bar styles */
-        #loading-container {
+        #loading {
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: black;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 24px;
             color: white;
-            font-size: 18px;
-            flex-direction: column;
-        }
-
-        #progress-bar {
-            width: 50%;
-            height: 20px;
-            background: white;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 20px;
             border-radius: 10px;
-            overflow: hidden;
-        }
-
-        #progress-fill {
-            height: 100%;
-            width: 0%;
-            background: green;
         }
     </style>
 </head>
 <body>
-    <!-- Loading screen -->
-    <div id="loading-container">
-        <p>Loading Model... <span id="progress-text">0%</span></p>
-        <div id="progress-bar"><div id="progress-fill"></div></div>
-    </div>
-
+    <div id="loading">Loading Model... 0%</div>
     <script>
+        const objUrl = "https://storage.googleapis.com/politistikes_diadromes/final2.obj";
+        const mtlUrl = "https://storage.googleapis.com/politistikes_diadromes/final2.mtl";
+
         // Scene Setup
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -57,51 +36,55 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        // Loading elements
-        const loadingContainer = document.getElementById("loading-container");
-        const progressText = document.getElementById("progress-text");
-        const progressFill = document.getElementById("progress-fill");
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 1);
+        scene.add(ambientLight);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+        directionalLight.position.set(5, 10, 5).normalize();
+        scene.add(directionalLight);
 
-        // Google Drive links
-        const objUrl = "https://storage.googleapis.com/politistikes_diadromes/final2.obj";
-        const mtlUrl = "https://storage.googleapis.com/politistikes_diadromes/final2.mtl";
+        // Loading Manager
+        const loadingElement = document.getElementById("loading");
 
-        // Load MTL (Material)
-        const mtlLoader = new THREE.MTLLoader();
+        const loadingManager = new THREE.LoadingManager();
+        loadingManager.onProgress = function (url, itemsLoaded, itemsTotal) {
+            loadingElement.innerText = `Loading Model... ${Math.round((itemsLoaded / itemsTotal) * 100)}%`;
+        };
+        loadingManager.onLoad = function () {
+            loadingElement.style.display = "none"; // Hide loading screen
+        };
+
+        // Load MTL and OBJ
+        const mtlLoader = new THREE.MTLLoader(loadingManager);
         mtlLoader.load(mtlUrl, function (materials) {
             materials.preload();
-
-            // Load OBJ with progress tracking
-            const objLoader = new THREE.OBJLoader();
+            const objLoader = new THREE.OBJLoader(loadingManager);
             objLoader.setMaterials(materials);
-
-            const manager = new THREE.LoadingManager();
-            manager.onProgress = function (url, loaded, total) {
-                let percent = Math.floor((loaded / total) * 100);
-                progressText.textContent = percent + "%";
-                progressFill.style.width = percent + "%";
-            };
-
-            manager.onLoad = function () {
-                loadingContainer.style.display = "none"; // Hide loading screen when done
-            };
-
             objLoader.load(objUrl, function (object) {
+                object.scale.set(0.01, 0.01, 0.01);  // Adjust scale if needed
+                object.position.set(0, -1, 0);      // Adjust position if needed
                 scene.add(object);
-                camera.position.set(0, 5, 10);
-                animate();
-            }, function (xhr) {
-                let percent = Math.floor((xhr.loaded / xhr.total) * 100);
-                progressText.textContent = percent + "%";
-                progressFill.style.width = percent + "%";
             });
         });
 
-        // Render Loop
+        // Camera Position
+        camera.position.set(0, 1, 5);
+
+        // Orbit Controls (Optional)
         function animate() {
             requestAnimationFrame(animate);
             renderer.render(scene, camera);
         }
+        animate();
+
+        // Resize Handling
+        window.addEventListener("resize", () => {
+            const width = window.innerWidth;
+            const height = window.innerHeight;
+            renderer.setSize(width, height);
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+        });
     </script>
 </body>
 </html>
