@@ -7,6 +7,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three/examples/js/loaders/MTLLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three/examples/js/loaders/OBJLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three/examples/js/controls/OrbitControls.js"></script> <!-- ✅ ADDED -->
     <style>
         body { margin: 0; overflow: hidden; }
         canvas { display: block; }
@@ -43,13 +44,23 @@
         directionalLight.position.set(5, 10, 5).normalize();
         scene.add(directionalLight);
 
+        // Orbit Controls ✅
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.screenSpacePanning = false;
+        controls.minDistance = 1;
+        controls.maxDistance = 100;
+        controls.target.set(0, 0, 0); // Look at the center
+
         // Loading Manager
         const loadingElement = document.getElementById("loading");
-
         const loadingManager = new THREE.LoadingManager();
+        
         loadingManager.onProgress = function (url, itemsLoaded, itemsTotal) {
             loadingElement.innerText = `Loading Model... ${Math.round((itemsLoaded / itemsTotal) * 100)}%`;
         };
+
         loadingManager.onLoad = function () {
             loadingElement.style.display = "none"; // Hide loading screen
         };
@@ -70,9 +81,10 @@
         // Camera Position
         camera.position.set(0, 1, 5);
 
-        // Orbit Controls (Optional)
+        // Animation Loop ✅ Updated to include controls
         function animate() {
             requestAnimationFrame(animate);
+            controls.update(); // Update controls
             renderer.render(scene, camera);
         }
         animate();
