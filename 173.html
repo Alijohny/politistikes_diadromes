@@ -7,7 +7,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three/examples/js/loaders/MTLLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three/examples/js/loaders/OBJLoader.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three/examples/js/controls/OrbitControls.js"></script> <!-- ✅ ADDED -->
+    <script src="https://cdn.jsdelivr.net/npm/three/examples/js/controls/OrbitControls.js"></script>
     <style>
         body { margin: 0; overflow: hidden; }
         canvas { display: block; }
@@ -44,7 +44,7 @@
         directionalLight.position.set(5, 10, 5).normalize();
         scene.add(directionalLight);
 
-        // Orbit Controls ✅
+        // Orbit Controls
         const controls = new THREE.OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
         controls.dampingFactor = 0.05;
@@ -72,7 +72,7 @@
             const objLoader = new THREE.OBJLoader(loadingManager);
             objLoader.setMaterials(materials);
             objLoader.load(objUrl, function (object) {
-                object.scale.set(0.5, 0.5, 0.5);  // Adjust scale if needed
+                object.scale.set(0.3, 0.3, 0.3);  // Adjust scale if needed
                 object.position.set(0, 0, 0);      // Adjust position if needed
                 scene.add(object);
             });
