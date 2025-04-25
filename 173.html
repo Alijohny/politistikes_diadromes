@@ -29,7 +29,7 @@
     <script>
         const objUrl = "https://storage.googleapis.com/politistikes_diadromes/final2.obj";
         const mtlUrl = "https://storage.googleapis.com/politistikes_diadromes/final2.mtl";
-        const textureUrl = "https://storage.googleapis.com/politistikes_diadromes/final2.jpg";
+        const textureUrl = "https://storage.googleapis.com/politistikes_diadromes/final2.png";
 
         // Scene Setup
         const scene = new THREE.Scene();
@@ -69,20 +69,6 @@
             console.error(`Error loading: ${url}`);
         };
 
-        // Add Test Plane for Texture Debugging
-        const textureLoader = new THREE.TextureLoader(loadingManager);
-        textureLoader.load(textureUrl, function (texture) {
-            texture.colorSpace = THREE.sRGBColorSpace;
-            console.log(`Texture loaded: ${textureUrl}`, texture);
-            const planeGeometry = new THREE.PlaneGeometry(2, 2);
-            const planeMaterial = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide });
-            const plane = new THREE.Mesh(planeGeometry, planeMaterial);
-            plane.position.set(3, 0, 0); // Position plane to the right of the model
-            scene.add(plane);
-        }, undefined, function (error) {
-            console.error(`Failed to load texture: ${textureUrl}`, error);
-        });
-
         // Load MTL and OBJ
         const mtlLoader = new THREE.MTLLoader(loadingManager);
         mtlLoader.load(mtlUrl, function (materials) {
@@ -101,20 +87,35 @@
                 scene.add(object);
 
                 // Apply MeshBasicMaterial with texture
+                const textureLoader = new THREE.TextureLoader(loadingManager);
                 textureLoader.load(textureUrl, function (texture) {
                     texture.colorSpace = THREE.sRGBColorSpace;
+                    console.log(`Texture loaded: ${textureUrl}`, texture);
+                    let meshCount = 0;
                     object.traverse(function (child) {
                         if (child.isMesh) {
+                            meshCount++;
                             child.material = new THREE.MeshBasicMaterial({
                                 map: texture,
                                 side: THREE.DoubleSide
                             });
                             child.material.needsUpdate = true;
-                            console.log(`Mesh material applied: ${child.material.name}`, child.material);
+                            console.log(`Mesh ${meshCount} material applied:`, child.material);
                         }
                     });
+                    console.log(`Total meshes textured: ${meshCount}`);
                 }, undefined, function (error) {
-                    console.error(`Failed to load fallback texture: ${textureUrl}`, error);
+                    console.error(`Failed to load texture: ${textureUrl}`, error);
+                    // Fallback to default texture
+                    object.traverse(function (child) {
+                        if (child.isMesh) {
+                            child.material = new THREE.MeshBasicMaterial({
+                                color: 0x00ff00, // Green to indicate texture failure
+                                side: THREE.DoubleSide
+                            });
+                            child.material.needsUpdate = true;
+                        }
+                    });
                 });
             }, undefined, function (error) {
                 console.error("OBJ loading error:", error);
@@ -139,9 +140,4 @@
             const width = window.innerWidth;
             const height = window.innerHeight;
             renderer.setSize(width, height);
-            camera.aspect = width / height;
-            camera.updateProjectionMatrix();
-        });
-    </script>
-</body>
-</html>
+            camera.aspect = width /
