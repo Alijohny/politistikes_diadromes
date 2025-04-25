@@ -29,7 +29,7 @@
     <script>
         const objUrl = "https://storage.googleapis.com/politistikes_diadromes/final2.obj";
         const mtlUrl = "https://storage.googleapis.com/politistikes_diadromes/final2.mtl";
-        const textureUrl = "https://storage.googleapis.com/politistikes_diadromes/final2.jpg"; // Fallback texture URL
+        const textureUrl = "https://storage.googleapis.com/politistikes_diadromes/final2.jpg";
 
         // Scene Setup
         const scene = new THREE.Scene();
@@ -39,31 +39,17 @@
         renderer.setPixelRatio(window.devicePixelRatio);
         document.body.appendChild(renderer.domElement);
 
-        // Lighting
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); // Brighter ambient
-        scene.add(ambientLight);
-        const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6); // Natural lighting
-        hemisphereLight.position.set(0, 20, 0);
-        scene.add(hemisphereLight);
-        const directionalLight1 = new THREE.DirectionalLight(0xffffff, 1.0);
-        directionalLight1.position.set(5, 10, 5);
-        scene.add(directionalLight1);
-        const directionalLight2 = new THREE.DirectionalLight(0xffffff, 1.0);
-        directionalLight2.position.set(-5, 10, -5);
-        scene.add(directionalLight2);
-
         // Orbit Controls
         const controls = new THREE.OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
         controls.dampingFactor = 0.05;
         controls.screenSpacePanning = true;
-        controls.minDistance = 2; // Allow closer zoom
-        controls.maxDistance = 50; // Allow further zoom out
-        controls.minPolarAngle = 0; // Full vertical rotation
+        controls.minDistance = 2;
+        controls.maxDistance = 50;
+        controls.minPolarAngle = 0;
         controls.maxPolarAngle = Math.PI;
-        controls.minAzimuthAngle = -Infinity; // Full horizontal rotation
+        controls.minAzimuthAngle = -Infinity;
         controls.maxAzimuthAngle = Infinity;
-        controls.autoRotate = false; // Set to true for testing rotation
         controls.enablePan = true;
         controls.enableRotate = true;
 
@@ -79,50 +65,66 @@
             loadingElement.style.display = "none";
         };
 
+        loadingManager.onError = function (url) {
+            console.error(`Error loading: ${url}`);
+        };
+
+        // Add Test Plane for Texture Debugging
+        const textureLoader = new THREE.TextureLoader(loadingManager);
+        textureLoader.load(textureUrl, function (texture) {
+            texture.colorSpace = THREE.sRGBColorSpace;
+            console.log(`Texture loaded: ${textureUrl}`, texture);
+            const planeGeometry = new THREE.PlaneGeometry(2, 2);
+            const planeMaterial = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide });
+            const plane = new THREE.Mesh(planeGeometry, planeMaterial);
+            plane.position.set(3, 0, 0); // Position plane to the right of the model
+            scene.add(plane);
+        }, undefined, function (error) {
+            console.error(`Failed to load texture: ${textureUrl}`, error);
+        });
+
         // Load MTL and OBJ
         const mtlLoader = new THREE.MTLLoader(loadingManager);
         mtlLoader.load(mtlUrl, function (materials) {
             materials.preload();
-            // Fix texture color and material
-            Object.values(materials.materials).forEach(material => {
-                if (material.map) {
-                    material.map.colorSpace = THREE.sRGBColorSpace;
-                    material.side = THREE.DoubleSide; // Handle flipped normals
-                }
-                material.needsUpdate = true;
-            });
+            console.log("MTL Materials:", materials.materials);
 
             const objLoader = new THREE.OBJLoader(loadingManager);
             objLoader.setMaterials(materials);
             objLoader.load(objUrl, function (object) {
-                // Center the model
                 const box = new THREE.Box3().setFromObject(object);
                 const center = box.getCenter(new THREE.Vector3());
                 object.position.sub(center);
-                controls.target.copy(center); // Set controls target to model center
+                controls.target.copy(center);
                 object.scale.set(0.6, 0.6, 0.6);
-                object.rotation.x = Math.PI; // Flip upside down
+                object.rotation.x = Math.PI; // Upside down
                 scene.add(object);
 
-                // Fallback: Apply texture directly if MTL fails
-                const textureLoader = new THREE.TextureLoader();
+                // Apply MeshBasicMaterial with texture
                 textureLoader.load(textureUrl, function (texture) {
                     texture.colorSpace = THREE.sRGBColorSpace;
                     object.traverse(function (child) {
                         if (child.isMesh) {
-                            child.material = new THREE.MeshStandardMaterial({
+                            child.material = new THREE.MeshBasicMaterial({
                                 map: texture,
                                 side: THREE.DoubleSide
                             });
                             child.material.needsUpdate = true;
+                            console.log(`Mesh material applied: ${child.material.name}`, child.material);
                         }
                     });
+                }, undefined, function (error) {
+                    console.error(`Failed to load fallback texture: ${textureUrl}`, error);
                 });
+            }, undefined, function (error) {
+                console.error("OBJ loading error:", error);
             });
+        }, undefined, function (error) {
+            console.error("MTL loading error:", error);
         });
 
         // Camera Position
-        camera.position.set(0, 2, 10); // Zoomed out view
+        camera.position.set(0, 2, 10);
 
         // Animation Loop
         function animate() {
