@@ -29,7 +29,6 @@
     <script>
         const objUrl = "https://storage.googleapis.com/politistikes_diadromes/final2.obj";
         const mtlUrl = "https://storage.googleapis.com/politistikes_diadromes/final2.mtl";
-        const textureUrl = "https://storage.googleapis.com/politistikes_diadromes/final2.jpg";
 
         // Scene Setup
         const scene = new THREE.Scene();
@@ -63,21 +62,34 @@
 
         loadingManager.onLoad = function () {
             loadingElement.style.display = "none";
+            console.log("All resources loaded successfully");
         };
 
         loadingManager.onError = function (url) {
             console.error(`Error loading: ${url}`);
+            loadingElement.innerText = `Error loading: ${url}`;
         };
 
         // Load MTL and OBJ
         const mtlLoader = new THREE.MTLLoader(loadingManager);
         mtlLoader.load(mtlUrl, function (materials) {
+            console.log("MTL loaded successfully:", materials.materials);
             materials.preload();
-            console.log("MTL Materials:", materials.materials);
+            Object.values(materials.materials).forEach(material => {
+                if (material.map) {
+                    material.map.colorSpace = THREE.sRGBColorSpace;
+                    material.side = THREE.DoubleSide;
+                    console.log(`Material texture: ${material.map.image.src}`);
+                } else {
+                    console.warn(`No texture map for material: ${material.name}`);
+                }
+                material.needsUpdate = true;
+            });
 
             const objLoader = new THREE.OBJLoader(loadingManager);
             objLoader.setMaterials(materials);
             objLoader.load(objUrl, function (object) {
+                console.log("OBJ loaded successfully");
                 const box = new THREE.Box3().setFromObject(object);
                 const center = box.getCenter(new THREE.Vector3());
                 object.position.sub(center);
@@ -86,42 +98,30 @@
                 object.rotation.x = Math.PI; // Upside down
                 scene.add(object);
 
-                // Apply MeshBasicMaterial with texture
-                const textureLoader = new THREE.TextureLoader(loadingManager);
-                textureLoader.load(textureUrl, function (texture) {
-                    texture.colorSpace = THREE.sRGBColorSpace;
-                    console.log(`Texture loaded: ${textureUrl}`, texture);
-                    let meshCount = 0;
-                    object.traverse(function (child) {
-                        if (child.isMesh) {
-                            meshCount++;
-                            child.material = new THREE.MeshBasicMaterial({
-                                map: texture,
-                                side: THREE.DoubleSide
-                            });
-                            child.material.needsUpdate = true;
-                            console.log(`Mesh ${meshCount} material applied:`, child.material);
-                        }
-                    });
-                    console.log(`Total meshes textured: ${meshCount}`);
-                }, undefined, function (error) {
-                    console.error(`Failed to load texture: ${textureUrl}`, error);
-                    // Fallback to default texture
-                    object.traverse(function (child) {
-                        if (child.isMesh) {
+                // Verify material application
+                let meshCount = 0;
+                object.traverse(function (child) {
+                    if (child.isMesh) {
+                        meshCount++;
+                        if (!child.material.map) {
+                            console.warn(`Mesh ${meshCount} has no texture, applying fallback`);
                             child.material = new THREE.MeshBasicMaterial({
                                 color: 0x00ff00, // Green to indicate texture failure
                                 side: THREE.DoubleSide
                             });
                             child.material.needsUpdate = true;
                         }
-                    });
+                        console.log(`Mesh ${meshCount} material:`, child.material);
+                    }
                 });
+                console.log(`Total meshes: ${meshCount}`);
             }, undefined, function (error) {
                 console.error("OBJ loading error:", error);
+                loadingElement.innerText = "Error loading OBJ file";
             });
         }, undefined, function (error) {
             console.error("MTL loading error:", error);
+            loadingElement.innerText = "Error loading MTL file";
         });
 
         // Camera Position
@@ -140,4 +140,9 @@
             const width = window.innerWidth;
             const height = window.innerHeight;
             renderer.setSize(width, height);
-            camera.aspect = width /
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+        });
+    </script>
+</body>
+</html>
