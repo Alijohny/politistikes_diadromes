@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>3D Model Viewer</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/loaders/MTLLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/loaders/OBJLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/controls/OrbitControls.js"></script>
     <style>
@@ -29,6 +30,7 @@
         console.log("Starting 3D model viewer");
 
         const objUrl = "https://storage.googleapis.com/politistikes_diadromes/final2.obj";
+        const mtlUrl = "https://storage.googleapis.com/politistikes_diadromes/final2.mtl";
         const textureUrl = "https://storage.googleapis.com/politistikes_diadromes/final2.jpg";
 
         // Scene Setup
@@ -88,62 +90,123 @@
             loadingElement.innerText = `Error loading: ${url}`;
         };
 
-        // Load OBJ
+        // Load MTL and OBJ
         try {
-            console.log("Loading OBJ:", objUrl);
-            const objLoader = new THREE.OBJLoader(loadingManager);
-            objLoader.load(objUrl, function (object) {
-                console.log("OBJ loaded successfully");
-                const box = new THREE.Box3().setFromObject(object);
-                const center = box.getCenter(new THREE.Vector3());
-                object.position.sub(center);
-                controls.target.copy(center);
-                object.scale.set(0.6, 0.6, 0.6);
-                object.rotation.x = Math.PI; // Upside down
-                scene.add(object);
+            console.log("Loading MTL:", mtlUrl);
+            const mtlLoader = new THREE.MTLLoader(loadingManager);
+            mtlLoader.setPath("https://storage.googleapis.com/politistikes_diadromes/"); // Resolve relative map_Kd
+            mtlLoader.load(mtlUrl, function (materials) {
+                console.log("MTL loaded successfully:", Object.keys(materials.materials));
+                materials.preload();
+                Object.values(materials.materials).forEach(material => {
+                    if (material.map && material.map.image) {
+                        material.map.colorSpace = THREE.sRGBColorSpace;
+                        material.side = THREE.DoubleSide;
+                        console.log(`Material texture: ${material.map.image.src}`);
+                    } else {
+                        console.warn(`No valid texture for material: ${material.name}, applying fallback`);
+                        material.map = null; // Clear invalid map
+                        material.color = new THREE.Color(0x00ff00); // Green fallback
+                        material.side = THREE.DoubleSide;
+                    }
+                    material.needsUpdate = true;
+                });
 
-                // Apply MeshBasicMaterial with texture
-                console.log("Loading texture:", textureUrl);
-                const textureLoader = new THREE.TextureLoader(loadingManager);
-                textureLoader.load(textureUrl, function (texture) {
-                    texture.colorSpace = THREE.sRGBColorSpace;
-                    console.log("Texture loaded:", textureUrl);
+                console.log("Loading OBJ:", objUrl);
+                const objLoader = new THREE.OBJLoader(loadingManager);
+                objLoader.setMaterials(materials);
+                objLoader.load(objUrl, function (object) {
+                    console.log("OBJ loaded successfully");
+                    const box = new THREE.Box3().setFromObject(object);
+                    const center = box.getCenter(new THREE.Vector3());
+                    object.position.sub(center);
+                    controls.target.copy(center);
+                    object.scale.set(0.6, 0.6, 0.6);
+                    object.rotation.x = Math.PI; // Upside down
+                    scene.add(object);
+
                     let meshCount = 0;
                     object.traverse(function (child) {
                         if (child.isMesh) {
                             meshCount++;
-                            child.material = new THREE.MeshBasicMaterial({
-                                map: texture,
-                                side: THREE.DoubleSide
-                            });
-                            child.material.needsUpdate = true;
-                            console.log(`Mesh ${meshCount} texture applied:`, child.material);
+                            if (!child.material.map) {
+                                console.warn(`Mesh ${meshCount} has no texture, applying manual texture`);
+                                const textureLoader = new THREE.TextureLoader(loadingManager);
+                                textureLoader.load(textureUrl, function (texture) {
+                                    texture.colorSpace = THREE.sRGBColorSpace;
+                                    child.material = new THREE.MeshBasicMaterial({
+                                        map: texture,
+                                        side: THREE.DoubleSide
+                                    });
+                                    child.material.needsUpdate = true;
+                                    console.log(`Mesh ${meshCount} texture applied: ${textureUrl}`);
+                                }, undefined, function (error) {
+                                    console.error(`Texture load error for mesh ${meshCount}:`, error);
+                                    child.material = new THREE.MeshBasicMaterial({
+                                        color: 0x00ff00, // Green fallback
+                                        side: THREE.DoubleSide
+                                    });
+                                    child.material.needsUpdate = true;
+                                });
+                            }
+                            console.log(`Mesh ${meshCount} material:`, child.material);
                         }
                     });
-                    console.log(`Total meshes textured: ${meshCount}`);
+                    console.log(`Total meshes: ${meshCount}`);
                 }, undefined, function (error) {
-                    console.error("Texture loading error:", error);
-                    let meshCount = 0;
-                    object.traverse(function (child) {
-                        if (child.isMesh) {
-                            meshCount++;
-                            child.material = new THREE.MeshBasicMaterial({
-                                color: 0x00ff00, // Green for texture failure
-                                side: THREE.DoubleSide
-                            });
-                            child.material.needsUpdate = true;
-                            console.log(`Mesh ${meshCount} fallback applied`);
-                        }
-                    });
-                    console.log(`Total meshes with fallback: ${meshCount}`);
+                    console.error("OBJ loading error:", error);
+                    loadingElement.innerText = "Error loading OBJ file";
                 });
             }, undefined, function (error) {
-                console.error("OBJ loading error:", error);
-                loadingElement.innerText = "Error loading OBJ file";
+                console.error("MTL loading error:", error);
+                loadingElement.innerText = "MTL failed, trying OBJ with manual texture";
+
+                // Fallback to OBJ with manual texture
+                console.log("Loading OBJ:", objUrl);
+                const objLoader = new THREE.OBJLoader(loadingManager);
+                objLoader.load(objUrl, function (object) {
+                    console.log("OBJ loaded successfully");
+                    const box = new THREE.Box3().setFromObject(object);
+                    const center = box.getCenter(new THREE.Vector3());
+                    object.position.sub(center);
+                    controls.target.copy(center);
+                    object.scale.set(0.6, 0.6, 0.6);
+                    object.rotation.x = Math.PI; // Upside down
+                    scene.add(object);
+
+                    let meshCount = 0;
+                    object.traverse(function (child) {
+                        if (child.isMesh) {
+                            meshCount++;
+                            console.log(`Applying texture to mesh ${meshCount}`);
+                            const textureLoader = new THREE.TextureLoader(loadingManager);
+                            textureLoader.load(textureUrl, function (texture) {
+                                texture.colorSpace = THREE.sRGBColorSpace;
+                                child.material = new THREE.MeshBasicMaterial({
+                                    map: texture,
+                                    side: THREE.DoubleSide
+                                });
+                                child.material.needsUpdate = true;
+                                console.log(`Mesh ${meshCount} texture applied: ${textureUrl}`);
+                            }, undefined, function (error) {
+                                console.error(`Texture load error for mesh ${meshCount}:`, error);
+                                child.material = new THREE.MeshBasicMaterial({
+                                    color: 0x00ff00, // Green fallback
+                                    side: THREE.DoubleSide
+                                });
+                                child.material.needsUpdate = true;
+                            });
+                        }
+                    });
+                    console.log(`Total meshes: ${meshCount}`);
+                }, undefined, function (error) {
+                    console.error("OBJ loading error:", error);
+                    loadingElement.innerText = "Error loading OBJ file";
+                });
             });
         } catch (error) {
-            console.error("OBJ loader setup error:", error);
-            loadingElement.innerText = "OBJ loader setup error";
+            console.error("MTL loader setup error:", error);
+            loadingElement.innerText = "MTL loader setup error";
         }
 
         // Animation Loop
