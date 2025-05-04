@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Model Viewer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/loaders/MTLLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/loaders/OBJLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/controls/OrbitControls.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden;}
+        canvas { display: block; width: 100%; height: 100%; }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 24px;
+            color: white;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading">Loading Model... 0%</div>
+    <script>
+        console.log("Starting 3D model viewer");
+
+        const objUrl = "https://storage.googleapis.com/politistikes_diadromes/dexameni_iraio2.obj";
+        const mtlUrl = "https://storage.googleapis.com/politistikes_diadromes/dexameni_iraio2.mtl";
+        const textureUrl = "https://storage.googleapis.com/politistikes_diadromes/dexameni_iraio2.jpg";
+
+        // Scene Setup
+        let scene, camera, renderer, controls;
+        try {
+            scene = new THREE.Scene();
+            console.log("Scene created");
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 2, 10);
+            console.log("Camera initialized");
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            document.body.appendChild(renderer.domElement);
+            console.log("Renderer initialized");
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.screenSpacePanning = true;
+            controls.minDistance = 2;
+            controls.maxDistance = 50;
+            controls.minPolarAngle = 0;
+            controls.maxPolarAngle = Math.PI;
+            controls.minAzimuthAngle = -Infinity;
+            controls.maxAzimuthAngle = Infinity;
+            controls.enablePan = true;
+            controls.enableRotate = true;
+            console.log("OrbitControls initialized");
+        } catch (error) {
+            console.error("Setup error:", error);
+            document.getElementById("loading").innerText = "Setup error: Check console";
+            throw error;
+        }
+
+        // Loading Manager
+        const loadingElement = document.getElementById("loading");
+        const loadingManager = new THREE.LoadingManager();
+        
+        loadingManager.onStart = function (url, itemsLoaded, itemsTotal) {
+            console.log(`Started loading: ${url}, ${itemsLoaded}/${itemsTotal}`);
+        };
+
+        loadingManager.onProgress = function (url, itemsLoaded, itemsTotal) {
+            console.log(`Progress: ${url}, ${itemsLoaded}/${itemsTotal}`);
+            loadingElement.innerText = `Loading Model... ${Math.round((itemsLoaded / itemsTotal) * 100)}%`;
+        };
+
+        loadingManager.onLoad = function () {
+            console.log("All resources loaded");
+            loadingElement.style.display = "none";
+        };
+
+        loadingManager.onError = function (url) {
+            console.error(`Error loading: ${url}`);
+            loadingElement.innerText = `Error loading: ${url}`;
+        };
+
+        // Load MTL and OBJ
+        try {
+            console.log("Loading MTL:", mtlUrl);
+            const mtlLoader = new THREE.MTLLoader(loadingManager);
+            mtlLoader.setPath("https://storage.googleapis.com/politistikes_diadromes/"); // Resolve relative map_Kd
+            mtlLoader.load(mtlUrl, function (materials) {
+                console.log("MTL loaded successfully:", Object.keys(materials.materials));
+                materials.preload();
+                Object.values(materials.materials).forEach(material => {
+                    if (material.map && material.map.image) {
+                        material.map.colorSpace = THREE.sRGBColorSpace;
+                        material.side = THREE.DoubleSide;
+                        console.log(`Material texture: ${material.map.image.src}`);
+                    } else {
+                        console.warn(`No valid texture for material: ${material.name}, applying fallback`);
+                        material.map = null; // Clear invalid map
+                        material.color = new THREE.Color(0x00ff00); // Green fallback
+                        material.side = THREE.DoubleSide;
+                    }
+                    material.needsUpdate = true;
+                });
+
+                console.log("Loading OBJ:", objUrl);
+                const objLoader = new THREE.OBJLoader(loadingManager);
+                objLoader.setMaterials(materials);
+                objLoader.load(objUrl, function (object) {
+                    console.log("OBJ loaded successfully");
+                    const box = new THREE.Box3().setFromObject(object);
+                    const center = box.getCenter(new THREE.Vector3());
+                    object.position.sub(center);
+                    controls.target.copy(center);
+                    object.scale.set(0.6, 0.6, 0.6);
+                    object.rotation.x = Math.PI; // Upside down
+                    scene.add(object);
+
+                    let meshCount = 0;
+                    object.traverse(function (child) {
+                        if (child.isMesh) {
+                            meshCount++;
+                            if (!child.material.map) {
+                                console.warn(`Mesh ${meshCount} has no texture, applying manual texture`);
+                                const textureLoader = new THREE.TextureLoader(loadingManager);
+                                textureLoader.load(textureUrl, function (texture) {
+                                    texture.colorSpace = THREE.sRGBColorSpace;
+                                    child.material = new THREE.MeshBasicMaterial({
+                                        map: texture,
+                                        side: THREE.DoubleSide
+                                    });
+                                    child.material.needsUpdate = true;
+                                    console.log(`Mesh ${meshCount} texture applied: ${textureUrl}`);
+                                }, undefined, function (error) {
+                                    console.error(`Texture load error for mesh ${meshCount}:`, error);
+                                    child.material = new THREE.MeshBasicMaterial({
+                                        color: 0x00ff00, // Green fallback
+                                        side: THREE.DoubleSide
+                                    });
+                                    child.material.needsUpdate = true;
+                                });
+                            }
+                            console.log(`Mesh ${meshCount} material:`, child.material);
+                        }
+                    });
+                    console.log(`Total meshes: ${meshCount}`);
+                }, undefined, function (error) {
+                    console.error("OBJ loading error:", error);
+                    loadingElement.innerText = "Error loading OBJ file";
+                });
+            }, undefined, function (error) {
+                console.error("MTL loading error:", error);
+                loadingElement.innerText = "MTL failed, trying OBJ with manual texture";
+
+                // Fallback to OBJ with manual texture
+                console.log("Loading OBJ:", objUrl);
+                const objLoader = new THREE.OBJLoader(loadingManager);
+                objLoader.load(objUrl, function (object) {
+                    console.log("OBJ loaded successfully");
+                    const box = new THREE.Box3().setFromObject(object);
+                    const center = box.getCenter(new THREE.Vector3());
+                    object.position.sub(center);
+                    controls.target.copy(center);
+                    object.scale.set(0.6, 0.6, 0.6);
+                    object.rotation.x = Math.PI; // Upside down
+                    scene.add(object);
+
+                    let meshCount = 0;
+                    object.traverse(function (child) {
+                        if (child.isMesh) {
+                            meshCount++;
+                            console.log(`Applying texture to mesh ${meshCount}`);
+                            const textureLoader = new THREE.TextureLoader(loadingManager);
+                            textureLoader.load(textureUrl, function (texture) {
+                                texture.colorSpace = THREE.sRGBColorSpace;
+                                child.material = new THREE.MeshBasicMaterial({
+                                    map: texture,
+                                    side: THREE.DoubleSide
+                                });
+                                child.material.needsUpdate = true;
+                                console.log(`Mesh ${meshCount} texture applied: ${textureUrl}`);
+                            }, undefined, function (error) {
+                                console.error(`Texture load error for mesh ${meshCount}:`, error);
+                                child.material = new THREE.MeshBasicMaterial({
+                                    color: 0x00ff00, // Green fallback
+                                    side: THREE.DoubleSide
+                                });
+                                child.material.needsUpdate = true;
+                            });
+                        }
+                    });
+                    console.log(`Total meshes: ${meshCount}`);
+                }, undefined, function (error) {
+                    console.error("OBJ loading error:", error);
+                    loadingElement.innerText = "Error loading OBJ file";
+                });
+            });
+        } catch (error) {
+            console.error("MTL loader setup error:", error);
+            loadingElement.innerText = "MTL loader setup error";
+        }
+
+        // Animation Loop
+        function animate() {
+            requestAnimationFrame(animate);
+            if (controls) controls.update();
+            if (renderer && scene && camera) renderer.render(scene, camera);
+        }
+        animate();
+
+        // Resize Handling
+        window.addEventListener("resize", () => {
+            if (camera && renderer) {
+                const width = window.innerWidth;
+                const height = window.innerHeight;
+                renderer.setSize(width, height);
+                camera.aspect = width / height;
+                camera.updateProjectionMatrix();
+            }
+        });
+
+        console.log("Script loaded");
+    </script>
+</body>
+</html>
